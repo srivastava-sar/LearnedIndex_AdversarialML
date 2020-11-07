@@ -1,0 +1,158 @@
+---
+title: "Learned Index Structure Dataset AMZ2"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(DescTools)
+```
+
+## R Markdown
+
+```{r echo=FALSE}
+knitr::read_chunk('HelperFunction_LIndex.R')
+```
+
+Reading the data and then drawing the plot
+
+```{r readData}
+amz <- read.csv(file = "datasets/amz_salepoint_0415922224_com_norm.csv")
+str(amz)
+attach(amz)
+```
+
+
+```{r fitPolynomial, echo=TRUE, eval=FALSE}
+<<Polyfit_amz>>
+func_fitPoly(X,amz)
+```
+
+Based on the fitting, degree 4 polynomial seems suiitable
+
+```{r PolyVisual, echo=TRUE}
+<<Polyfit_Visual>>
+Quadfunct = func_PolyVis(X,3,date,amz)
+```
+
+### Step 2: Residual visualization
+```{r ResidualVisual}
+
+plot(Quadfunct$residuals^2)
+ultraMax <- which.max(Quadfunct$residuals^2)
+print(Quadfunct$residuals[ultraMax]^2)
+
+#Attack 36@4700 when lastN=60
+maxQ <- which(Quadfunct$residuals^2>100)
+#Max k residuals
+#print(maxQ)
+print(maxQ)
+print(length(maxQ))
+points(maxQ,Quadfunct$residuals[maxQ]^2, col="green",cex=2,pch=20)
+```
+
+
+### Step 3: Raw data analysis without using the model
+
+```{r keydiffVisual}
+<<key_diff_visual>>
+  keyDiff <- func_keyDiff(X,date)
+  keyDim <- dim(keyDiff)[1]
+```
+
+### Step 4: Fitting normal distribution on KeyDiff
+CUSUM algorithm is based on the assumption that the underlying algorithm follows a normal distribution. We thus fit a Gaussian curve on the keyDiff data.
+
+```{r GausFit}
+<<GaussFit>>
+  FIT <- func_FitNorm(keyDiff)
+```
+
+
+### STEP 5: CUSUM implementation
+```{r CUSUMCall}
+<<CUSUM_Impl2>>
+outcomeExits = func_CUSUM2(FIT,4,keyDiff,keyDim,y_lim=30000)
+print(outcomeExits)
+
+<<PlotRes>>
+  func_plotRes(Quadfunct,maxQ,ultraMax)
+
+
+```
+
+### Step 6: Evaluation 1
+```{r evaluation1, eval=TRUE}
+<<Evaluation1>>
+#lastN=20
+lastN=50
+EvalMeasure = func_eval1(lastN,keyDim,Quadfunct,maxQ,outcomeExits)
+print(EvalMeasure)
+```
+Proportion of relevant points extracted (TODO) 
+
+
+#### Step 6: Evaluation 2
+```{r evaluation2, eval=TRUE}
+
+<<Evaluation2>>
+EvalMeasure2 = func_eval2(outcomeExits,keyDim,lastN)
+
+```
+
+Ratio of points visited
+
+
+### Step 7: 2 sided CUSUM and evaluation
+```{r CUSUMCall2sided,eval=TRUE}
+
+<<CUSUM_Impl3>>
+<<CUSUM_Wrapper>>
+
+outcomeExits = func_CUSUM_wrapper(FIT,6,keyDiff,keyDim,y_lim=30000)
+
+print(outcomeExits)
+<<PlotRes>>
+  func_plotRes(Quadfunct,maxQ,ultraMax)
+
+lastN=200
+EvalMeasure = func_eval1(lastN,keyDim,Quadfunct,maxQ,outcomeExits)
+print(EvalMeasure)
+
+EvalMeasure2 = func_eval2(outcomeExits,keyDim,lastN)
+
+```
+
+### 8 Grid Search
+```{r GridSearch,warning=FALSE}
+
+lastN = seq(10,100,by = 10)
+T_factor = seq(3,7,by = 0.5)
+eval1 = data.frame(matrix(1:90,ncol=9))
+eval2 = data.frame(matrix(1:90,ncol=9))
+
+for (l in 1:10){
+  for (t in 1:9){
+    outcomeExits = func_CUSUM_wrapper(FIT,T_factor[t],keyDiff,keyDim,y_lim=300000,FALSE)
+    eval1[l,t] = func_eval1(lastN[l],keyDim,Quadfunct,maxQ,outcomeExits,FALSE)
+    eval2[l,t] = func_eval2(outcomeExits,keyDim,lastN[l])
+  }
+}
+
+names(eval1) <- T_factor
+names(eval2) <- T_factor
+row.names(eval1) <- lastN
+row.names(eval2) <- lastN
+
+print(eval1)
+print(eval2)
+
+matplot(eval1,type = "l")
+matplot(eval2,type = "l")
+
+detach(amz)
+
+
+```
+
+
